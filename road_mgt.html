@@ -248,15 +248,19 @@ $(function() {
    * surfaceの取りうる範囲を取得する
    */
   function getSurfaceRange(callback) {
+    console.log('getSurfaceRange');
     $.ajax({
       type : 'GET',
       url : '/road_mgt/json/get_road_surface_range',
       cache: false,
       data : {},
       success : function (data) {
+        console.log('getSurfaceRange success');
+        surfaceRange = data;
         callback(null, data);
       },
       'error' :  function(xhr, textStatus, error) {
+        console.log('getSurfaceRange error');
         callback(error, null);
       }
     });
@@ -445,22 +449,20 @@ $(function() {
   showBlockUI();
   // 最優先タスク
   var priorityTask = [
-    getSurfaceRange
+    getSurfaceRange,
+    getRoadMaster
   ];
-  async.parallel(priorityTask, function(err, results) {
+  async.series(priorityTask, function(err, results) {
     if (err) {
       $.unblockUI();
       console.log('priorityTask', err);
       return;
     }
-    surfaceRange= results[0];
-
     // SVGをマップレイヤーにフィット
     map.on('viewreset', updateMapLayer);
 
     // 通常タスク
     var backgroundTask = [
-      getRoadMaster,
       getMeshData,
       getSurface
     ];
