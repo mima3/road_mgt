@@ -106,7 +106,45 @@ $(function() {
   map._initPathRoot();
   
   var tileLayer = null;
-  
+  var d3_features;
+  var d3_marker;
+  var surfaceRange;
+  var svg = d3.select(map.getPanes().overlayPane).append("svg");
+  var g = svg.append("g").attr("class", "leaflet-zoom-hide");
+  var transform = d3.geo.transform({point: projectPoint});
+  var path = d3.geo.path().projection(transform);
+  // ぼかし効果
+  var filter = g.append("defs")
+                  .append("filter")
+                  .attr("id", "blur");
+  filter.append("svg:feGaussianBlur")
+        .attr("in", "SourceGraphic")
+        .attr("stdDeviation", 2)
+        .attr("result", "blur");
+
+  var colorDict = {
+    'iri' : '#1e90ff',
+    'step' : '#006400',
+    'rutting_amount' : '#808000',
+    'cracking_rate' : '#9acd32',
+    'subsidence_and_puddle' : '#5f9ea0',
+    'pothole_num' : '#ffa500',
+    'patching_num' : '#b8860b',
+
+    'iri_avg' : '#1e90ff',
+    'step_avg' : '#006400',
+    'rutting_amount_avg' : '#808000',
+    'cracking_rate_avg' : '#9acd32',
+    'subsidence_and_puddle_avg' : '#5f9ea0',
+    'pothole_num_sum' : '#ffa500',
+    'patching_num_sum' : '#b8860b'
+  };
+
+  //位置→座標変換
+  function projectPoint(x, y) {
+    var point = map.latLngToLayerPoint(new L.LatLng(y, x));
+    this.stream.point(point.x, point.y);
+  }
   /**
    * タイルレイヤーの変更
    * @param [in] v タイルレイヤーのキー
@@ -268,8 +306,7 @@ $(function() {
     });
   }
   
-  var d3_features;
-  var d3_marker;
+
 
   /**
    * SVG要素をleafletのマップレイヤーにフィットさせる
@@ -297,14 +334,15 @@ $(function() {
         .attr({
           'fill-opacity': 0.4,
           'fill': 'none',
-          'stroke': 'red'
+          'stroke': '#dc143c'
         });
     }
     if (d3_marker) {
       d3_marker
         .attr({
-          'r': 5,
-          'fill': 'blue'
+           r : 5,
+           fill : 'red',
+           filter: 'url(#blur)'
         });
       setMarkerTransition();
     }
@@ -437,16 +475,6 @@ $(function() {
     });
   }
 
-  var surfaceRange;
-  var svg = d3.select(map.getPanes().overlayPane).append("svg");
-  var g = svg.append("g").attr("class", "leaflet-zoom-hide");
-  var transform = d3.geo.transform({point: projectPoint});
-  var path = d3.geo.path().projection(transform);
-  //位置→座標変換
-  function projectPoint(x, y) {
-    var point = map.latLngToLayerPoint(new L.LatLng(y, x));
-    this.stream.point(point.x, point.y);
-  }
 
   showBlockUI();
   // 最優先タスク
@@ -550,7 +578,13 @@ $(function() {
         }
         return colorScale(d[v]);
       })
-      .attr('fill' , '#FFFF00');
+      .attr('fill', function(d) {
+        var v = $('#selMesh').val();
+        if (!v) {
+          return 0;
+        }
+        return colorDict[v];
+      });
   }
 
   /**
@@ -619,7 +653,14 @@ $(function() {
     }
     d3_surface
       .attr('fill-opacity', 0.2)
-      .attr('fill', '#0f0')
+      .attr('fill', function(d) {
+        var v = $('#selSurface').val();
+        if (!v) {
+          return 0;
+        }
+        return colorDict[v];
+      })
+      .attr('filter', 'url(#blur)')
       .attr('r', function(d) {
         var v = $('#selSurface').val();
         if (!v) {
