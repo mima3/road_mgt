@@ -300,12 +300,12 @@ $(function() {
     }
     function setMarkerTransition() {
       d3_marker.transition()
-        .duration(1500)
+        .duration(4000)
         .each('end', setMarkerTransition)
         .ease("linear")
         .attrTween("transform", function (d, i) {
-          var node = g.select('#road_' + i).node();
           return function (t) {
+            var node = g.select('#road_' + i).node();
             var p = node.getPointAtLength(node.getTotalLength()*t);
             return "translate(" + [p.x, p.y] + ")";
           }
