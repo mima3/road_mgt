@@ -90,6 +90,10 @@
     <div  style="clear:both;"></div>
     <p>このアプリケーションは、以下の著作物を改変して利用しています。</p>
     <p>【路面状況データ】【道路緒元データ】、クリエイティブ・コモンズ・ライセンス 表示 2.1 日本（http://creativecommons.org/licenses/by/2.1/jp/）、オープンデータ・アプリコンテスト利用規約（<a href="http://micrms.force.com/terms#rules" target="_blank">http://micrms.force.com/terms#rules</a>）</p>
+    <p></p>
+    <p>8分の1地域メッシュは色の濃淡で値の大きさを表します。</p>
+    <p>路面状況で選択したプロパティの大きさの円を記述します。この際、円にマウスオーバーすることで詳細が表示されます。</p>
+    <p>このアプリケーションはChromeで動作を確認しています。</p>
   </div>
 <script type="text/javascript">
 $(function() {
@@ -322,6 +326,7 @@ $(function() {
     return getDataByRange('road-master', surfaceRange.lat_min, surfaceRange.long_min, surfaceRange.lat_max, surfaceRange.long_max, function(err, data) {
       console.log('loadRoad', err, data);
       if (err) {
+        callback(err, null);
         return;
       }
       features = [];
@@ -422,7 +427,7 @@ $(function() {
         .attr('class', 'marker');
 
       updateMapLayer();
-
+      callback(null, null);
     });
   }
 
@@ -443,8 +448,8 @@ $(function() {
     getSurfaceRange
   ];
   async.parallel(priorityTask, function(err, results) {
-    $.unblockUI();
     if (err) {
+      $.unblockUI();
       console.log('priorityTask', err);
       return;
     }
@@ -462,6 +467,9 @@ $(function() {
 
     // 
     async.parallel(backgroundTask, function(err, results) {
+      console.log('backgroundTask', err, results);
+      $.unblockUI();
+
       if (err) {
         console.log('backgroundTask', err);
         return;
