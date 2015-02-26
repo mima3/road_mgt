@@ -21,7 +21,8 @@ def setup(conf):
 
 @app.get('/')
 def Home():
-    return 'road_mgt_db page...'
+    #return 'road_mgt_db page...'
+    redirect("/road_mgt/road_mgt.html")
 
 
 @app.get('/json/get_road_surface_mesh')
