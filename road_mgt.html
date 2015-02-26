@@ -7,7 +7,8 @@
   <link rel="stylesheet" href="js/jquery/jquery-ui.min.css" type="text/css" />
   <link rel="stylesheet" href="js/select2/select2.css" type="text/css" />
   <link rel="stylesheet" type="text/css" href="js/dc.js/dc.css"/>
-  <link rel="stylesheet" href="base.css" type="text/css" />
+  <link rel="stylesheet" type="text/css" href="js/d3-tip/d3-tip.css"/>
+  <link rel="stylesheet" href="base.css" type="text/css" />
   <script type="text/javascript" src="js/async/lib/async.js"></script>
   <script type="text/javascript" src="js/jquery/jquery-1.11.1.min.js"></script>
   <script type="text/javascript" src="js/jquery/jquery-ui-1.10.4.min.js"></script>
@@ -16,10 +17,23 @@
   <script type="text/javascript" src="js/select2/select2.min.js"></script> 
   <script type="text/javascript" src="js/crossfilter/crossfilter.js"></script>
   <script type="text/javascript" src="js/dc.js/dc.js"></script>
+  <script type="text/javascript" src="js/jsrender/jsrender.min.js"></script>
   <script src="js/leaflet-0.7.3/leaflet.js"></script>
+  <script type="text/javascript" src="js/d3-tip/index.js"></script>
   <script type="text/javascript" src="js/dateformat.js"></script>
   <script type="text/javascript" src="js/util.js"></script>
-
+  <script id="tooltipTmpl" type="text/x-jsrender">
+    {{:label}}<BR>
+    分析日時：{{:analysis_timestamp}}<BR>
+    緯度：{{:lat}} 経度：{{:long}} 高度：{{:alt}}<BR>
+    IRI：{{:iri}}<BR>
+    ポットホール数：{{:pothole_num}}<BR>
+    パッチング数：{{:patching_num}}<BR>
+    ひび割れ率：{{:cracking_rate}}<BR>
+    わだち掘れ深さ：{{:rutting_amount}}<BR>
+    段差：{{:step}}<BR>
+    沈下・水たまり：{{:subsidence_and_puddle}}<BR>
+  </script>
 
 </head>
 <body>
@@ -579,6 +593,14 @@ $(function() {
     dropdownAutoWidth: true
   });
 
+  var tip = d3.tip()
+    .attr('class', 'd3-tip')
+    .offset([-10, 0])
+    .html(function (d) {
+      return $('#tooltipTmpl').render(d);
+    }
+  );
+
   function drawSurface() {
     if (!d3_surface) {
       return;
@@ -644,10 +666,10 @@ $(function() {
           .enter()
           .append('circle')
           .attr('class', 'surface')
-          .on('mouseover', function(d) {
-            console.log(d);
-          })
+          .on('mouseover', tip.show)
+          .on('mouseout', tip.hide)
         drawSurface();
+        d3_surface.call(tip);
         callback(null, null);
       },
       'error' :  function(xhr, textStatus, error) {
