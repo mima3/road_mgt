@@ -24,7 +24,7 @@
 </head>
 <body>
     <div id="header" >
-      <h1>路線状況表示</h1>
+      <h1>路線状況Viewer</h1>
     </div>
   <div id="contents">
     
@@ -34,6 +34,8 @@
         <select id="selMap">
           <option value="OpenStreetMap" selected>OpenStreetMap</option>
           <option value="chiriin">地理院地図</option>
+          <option value="kibanws">基盤地図情報</option>
+          
         </select>
       </div>
       <div>
@@ -104,6 +106,11 @@ $(function() {
       'chiriin': {
         url : 'http://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png',
         attribution : '<a href="http://portal.cyberjapan.jp/help/termsofuse.html" target="_blank">国土地理院</a>',
+        id : null
+      },
+      'kibanws': {
+        url : 'http://www.finds.jp/ws/tmc/1.0.0/KBN25000ANF-900913-L/{z}/{x}/{y}.png', 
+        attribution: '<a target="_blank" href="http://www.finds.jp/wsdocs/kibanwms/index.html.ja">基盤地図情報(平24情使、第794号)</a>',
         id : null
       }
     }
