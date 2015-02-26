@@ -144,17 +144,34 @@ def get_road_surface():
     ret = []
     for row in query:
         ret.append({
-            row.label,
-            row.step,
-            row.alt,
-            row.analysis_timestamp,
-            row.rutting_amount,
-            row.long,
-            row.iri,
-            row.cracking_rate,
-            row.pothole_num,
-            row.subsidence_and_puddle,
-            row.lat,
-            row.patching_num
+            'label' : row.label,
+            'step' : row.step,
+            'alt' : row.alt,
+            'analysis_timestamp' : row.analysis_timestamp,
+            'rutting_amount' : row.rutting_amount,
+            'long' : row.long,
+            'iri' : row.iri,
+            'cracking_rate' : row.cracking_rate,
+            'pothole_num' : row.pothole_num,
+            'subsidence_and_puddle' : row.subsidence_and_puddle,
+            'lat' : row.lat,
+            'patching_num' : row.patching_num
         })
     return ret
+
+
+def get_road_surface_range():
+    query = RoadSurface.select(
+        fn.max(RoadSurface.lat).alias('lat_max'),
+        fn.min(RoadSurface.lat).alias('lat_min'),
+        fn.max(RoadSurface.long).alias('long_max'),
+        fn.min(RoadSurface.long).alias('long_min')
+    )
+    for row in query:
+        return {
+          'lat_max' : row.lat_max,
+          'lat_min' : row.lat_min,
+          'long_max' : row.long_max,
+          'long_min' : row.long_min,
+        }
+    return null;

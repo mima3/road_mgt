@@ -1,7 +1,7 @@
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
 <html lang="ja">
 <head>
-  <title>路線状況表示</title>
+  <title>路面状況 Viewer</title>
   <meta charset="UTF-8">
   <link rel="stylesheet" href="js/leaflet-0.7.3/leaflet.css" />
   <link rel="stylesheet" href="js/jquery/jquery-ui.min.css" type="text/css" />
@@ -17,6 +17,7 @@
   <script type="text/javascript" src="js/crossfilter/crossfilter.js"></script>
   <script type="text/javascript" src="js/dc.js/dc.js"></script>
   <script src="js/leaflet-0.7.3/leaflet.js"></script>
+  <script type="text/javascript" src="js/dateformat.js"></script>
   <script type="text/javascript" src="js/util.js"></script>
 
 
@@ -48,6 +49,24 @@
            <option value="patching_num_sum">パッチング数の合計</option>
         </select>
       </div>
+      <div>
+        路面状況：
+        <select id="selSurface">
+           <option value="" selected>非表示</option>
+           <option value="iri">IRI</option>
+           <option value="step">段差</option>
+           <option value="rutting_amount">わだち掘れ深さ</option>
+           <option value="cracking_rate">ひび割れ率</option>
+           <option value="subsidence_and_puddle">沈下・水たまり</option>
+           <option value="pothole_num">ポットホール数</option>
+           <option value="patching_num">パッチング数</option>
+        </select>
+      </div>
+      <div>
+        分析日：
+        <div id="chart-date"><img src="img/loading.gif" /></div>
+        <div  style="clear:both;"></div>
+      </div>
     </div>
     <div id = "main_area">
       <div id="map" style="width: 100%; height: 600px"></div>
@@ -64,16 +83,12 @@ $(function() {
   //Leafletに用意されたsvgを使う 
   map._initPathRoot();
   
-  //Tile Map Serviceの指定    
-  /*
-  L.tileLayer(
-      'http://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png', {
-      attribution: '&copy; ' + mapLink + ' Contributors',
-      maxZoom: 18,
-  }).addTo(map);
-  */
-
   var tileLayer = null;
+  
+  /**
+   * タイルレイヤーの変更
+   * @param [in] v タイルレイヤーのキー
+   */
   function changeTileLayer(v) {
     if (tileLayer) {
       map.removeLayer(tileLayer);
@@ -99,12 +114,10 @@ $(function() {
       id: mapDict[v].id
     }).addTo(map);
   }
+
   changeTileLayer('OpenStreetMap');
 
-  map.on('click', function(e){
-    console.log(e);
-  });
-
+  // タイルレイヤーの変更セレクトボックス
   $('#selMap').select2({
     width: 'resolve' ,
     dropdownAutoWidth: true
@@ -113,6 +126,10 @@ $(function() {
     changeTileLayer($('#selMap').val());
   });
 
+
+  /**
+   * 路面情報のAPIを実行
+   */
   function getDataByRange(data_type, lat_start, lon_start, lat_end, lon_end, callback) {
     var offset = 0;
     var limit = 300;
@@ -136,7 +153,6 @@ $(function() {
         },
         success : function (data) {
           console.log(data);
-          var obj = {};
           var root = data.documentElement;
           var attrs = root.attributes;
           var records = root.childNodes;
@@ -165,10 +181,6 @@ $(function() {
               }
             }
           }
-          //if (offset > 600) {
-          //  cb(null , obj);
-          //  return;
-          //}
           loadRoadOffset(lat_start, lon_start, lat_end, lon_end, offset + limit, limit, obj, cb);
         },
         'error' :  function(xhr, textStatus, error) {
@@ -187,28 +199,9 @@ $(function() {
     });
   }
 
-  var latlngBounds = map.getBounds();
-  var latlngBounds = map.getBounds();
-  var swLatlng = latlngBounds.getSouthWest();
-  var swlat = swLatlng.lat;
-  var swlng = swLatlng.lng;
-  var neLatlng = latlngBounds.getNorthEast();
-  var nelat = neLatlng.lat;
-  var nelng = neLatlng.lng;
-
-  var svg = d3.select(map.getPanes().overlayPane).append("svg");
-  var g = svg.append("g").attr("class", "leaflet-zoom-hide");
-  var transform = d3.geo.transform({point: projectPoint});
-  var path = d3.geo.path().projection(transform);
-  console.log('path', path);
-  //位置→座標変換
-  function projectPoint(x, y) {
-    var point = map.latLngToLayerPoint(new L.LatLng(y, x));
-    this.stream.point(point.x, point.y);
-  }
-
-
-  console.log(swlat, swlng, nelat, nelng);
+  /**
+   * ローディング画面の表示
+   */
   function showBlockUI() {
     $.blockUI(
       { 
@@ -225,140 +218,48 @@ $(function() {
       }
     );
   }
-  showBlockUI();
 
-
-  getDataByRange('road-master', swlat, swlng, nelat, nelng, function(err, data) {
-    $.unblockUI();
-    console.log('loadRoad', err, data);
-    if (err) {
-      return;
-    }
-    features = [];
-
-    for (var k in data) {
-      var f = false;
-      for (var i = 0; i < features.length; ++i) {
-        if (features[i].geometry.coordinates.lenght < 2) {
-          continue;
-        }
-        if (!data[k]['rm:long_start'] || !data[k]['rm:long_end'] ||
-            !data[k]['rm:lat_start'] || !data[k]['rm:lat_end']
-        ) {
-          // 座標がないデータは無視
-          f = true;
-          break;
-        }
-        // data[k]の開始点が、すでに登録済みのポイントの終了点と同じなら末尾に付与する
-        if (data[k]['rm:long_start'] == features[i].geometry.coordinates[features[i].geometry.coordinates.length - 1][0] &&
-            data[k]['rm:lat_start'] == features[i].geometry.coordinates[features[i].geometry.coordinates.length - 1][1]) {
-          features[i].geometry.coordinates.push(
-            [data[k]['rm:long_end'], data[k]['rm:lat_end']]
-          );
-          f = true;
-          break;
-        }
-
-        // data[k]の終了点が、すでに登録済みのポイントの開始点と同じなら先頭に付与する
-        if (data[k]['rm:long_end'] == features[i].geometry.coordinates[0][0] &&
-            data[k]['rm:lat_end'] == features[i].geometry.coordinates[0][1]) {
-          features[i].geometry.coordinates.splice(0, 0, 
-            [data[k]['rm:long_start'], data[k]['rm:lat_start']]
-          );
-          f = true;
-          break;
-        }
+  /**
+   * surfaceの取りうる範囲を取得する
+   */
+  function getSurfaceRange(callback) {
+    $.ajax({
+      type : 'GET',
+      url : '/road_mgt/json/get_road_surface_range',
+      cache: false,
+      data : {},
+      success : function (data) {
+        callback(null, data);
+      },
+      'error' :  function(xhr, textStatus, error) {
+        callback(error, null);
       }
-      if (!f) {
-        // どこのデータにも入らない。
-        features.push({
-          geometry : {
-            coordinates : [
-              [data[k]['rm:long_start'], data[k]['rm:lat_start']],
-              [data[k]['rm:long_end'], data[k]['rm:lat_end']]
-            ],
-            type : 'LineString'
-          },
-          properties: {},
-          type : 'Feature'
-        });
-      }
-    }
+    });
+  }
+  
+  var d3_features;
+  var d3_marker;
 
-    function compressionPath(features) {
-      var before = features.length;
-      for (var i = 0; i < features.length; ++i) {
-        for (var j = features.length -1; i < j; --j) {
-          var f1Start = features[i].geometry.coordinates[0];
-          var f1End = features[i].geometry.coordinates[features[i].geometry.coordinates.length-1];
+  /**
+   * SVG要素をleafletのマップレイヤーにフィットさせる
+   */
+  function updateMapLayer() {
+    //
+    console.log('updateMapLayer');
+    var topLeft = map.latLngToLayerPoint(new L.LatLng(surfaceRange.lat_max, surfaceRange.long_min));
+    var bottomRight = map.latLngToLayerPoint(new L.LatLng(surfaceRange.lat_min, surfaceRange.long_max));
 
-          var f2Start = features[j].geometry.coordinates[0];
-          var f2End = features[j].geometry.coordinates[features[j].geometry.coordinates.length-1];
-
-          // f1の開始点がf2の終端と一致する場合、f1の前にf2がある
-          if (f1Start[0] == f2End[0] && f1Start[1] == f2End[1]) {
-            features[i].geometry.coordinates = features[j].geometry.coordinates.concat(features[i].geometry.coordinates);
-            features.splice(j, 1);
-            break;
-          }
-          // f1の終了点がf2の開始点と一致する場合、f1の後にf2がある
-          if (f1End[0] == f2Start[0] && f1End[1] == f2Start[1]) {
-            features[i].geometry.coordinates = features[i].geometry.coordinates.concat(features[j].geometry.coordinates);
-            features.splice(j, 1);
-            break;
-          }
-        }
-      }
-      if (features.length == before) {
-        return;
-      }
-      compressionPath(features);
-    }
-
-    console.log(features.length);
-    compressionPath(features);
-    console.log(features.length);
-
-
-    var d3_features = g.selectAll('path')
-      .data(features)
-      .enter()
-      .append('path')
-      .attr('class', 'road')
-      .attr('id', function(d, i) {
-        return 'road_' + i;
+    svg.attr({
+        'width': bottomRight.x - topLeft.x,
+        'height': bottomRight.y - topLeft.y
+      })
+      .style({
+        'left': topLeft.x + 'px',
+        'top': topLeft.y + 'px'
       });
+    g.attr('transform', 'translate(' + -topLeft.x + ',' + -topLeft.y + ')');
 
-    var d3_marker = g.selectAll('circle')
-      .data(features)
-      .enter()
-      .append('circle')
-      .attr('class', 'marker');
-
-    map.on('viewreset', update);
-
-    update();
-
-    
-    function update() {
-      //SVG要素をleafletのマップレイヤーにフィットさせる
-      console.log('update');
-      var bounds = path.bounds({type:'FeatureCollection', 'features': features});
-
-      var topLeft = bounds[0];
-      var bottomRight = bounds[1];
-
-      svg.attr({
-          'width': bottomRight[0] - topLeft[0],
-          'height': bottomRight[1] - topLeft[1]
-        })
-        .style({
-          'left': topLeft[0] + 'px',
-          'top': topLeft[1] + 'px'
-        })
-    
-      g.attr('transform', 'translate(' + -topLeft[0] + ',' + -topLeft[1] + ')');
-    
+    if (d3_features) {
       // path要素（地形)更新
       d3_features
         .attr('d', path)
@@ -367,64 +268,185 @@ $(function() {
           'fill': 'none',
           'stroke': 'red'
         });
-
-      function setMarkerTransition(sel) {
-      }
-      d3_marker.attr('d', path)
+    }
+    if (d3_marker) {
+      d3_marker
         .attr({
-          'r': 2,
+          'r': 5,
           'fill': 'blue'
-        })
+        });
       setMarkerTransition();
+    }
+    function setMarkerTransition() {
+      d3_marker.transition()
+        .duration(1500)
+        .each('end', setMarkerTransition)
+        .ease("linear")
+        .attrTween("transform", function (d, i) {
+          var node = g.select('#road_' + i).node();
+          return function (t) {
+            var p = node.getPointAtLength(node.getTotalLength()*t);
+            return "translate(" + [p.x, p.y] + ")";
+          }
+        });
+    }
+    drawMesh();
+    drawSurface();
+  } 
 
-      function setMarkerTransition() {
-        d3_marker.transition()
-          .duration(1500)
-          .each('end', setMarkerTransition)
-          .ease("linear")
-          .attrTween("transform", function (d, i) {
-            var node = g.select('#road_' + i).node();
-            return function (t) {
-              var p = node.getPointAtLength(node.getTotalLength()*t);
-              return "translate(" + [p.x, p.y] + ")";
-            }
-          });
+  /**
+   * 道路緒元を取得する
+   */
+  function getRoadMaster(callback) {
+    return getDataByRange('road-master', surfaceRange.lat_min, surfaceRange.long_min, surfaceRange.lat_max, surfaceRange.long_max, function(err, data) {
+      console.log('loadRoad', err, data);
+      if (err) {
+        return;
       }
-      
-      drawMesh();
-    } 
-  });
-  
+      features = [];
 
-  var surfaces = [];
-  var measlocale = [];
-  /*
-  getDataByRange('road-surface', swlat, swlng, nelat, nelng, function(err, data) {
-    console.log('road-surface', err, data);
-    for (var k in data) {
-      var circle = L.circle([parseFloat(data[k]['geo:lat']), parseFloat(data[k]['geo:long'])], 5, {
-        color: 'green',
-         fillColor: '#f03',
-       fillOpacity: 0.5
-      }).addTo(map);
-      circle.bindPopup("I am a circle.");
-      surfaces.push(circle);
-    }
-  });
+      for (var k in data) {
+        var f = false;
+        for (var i = 0; i < features.length; ++i) {
+          if (features[i].geometry.coordinates.lenght < 2) {
+            continue;
+          }
+          if (!data[k]['rm:long_start'] || !data[k]['rm:long_end'] ||
+              !data[k]['rm:lat_start'] || !data[k]['rm:lat_end']
+          ) {
+            // 座標がないデータは無視
+            f = true;
+            break;
+          }
+          // data[k]の開始点が、すでに登録済みのポイントの終了点と同じなら末尾に付与する
+          if (data[k]['rm:long_start'] == features[i].geometry.coordinates[features[i].geometry.coordinates.length - 1][0] &&
+              data[k]['rm:lat_start'] == features[i].geometry.coordinates[features[i].geometry.coordinates.length - 1][1]) {
+            features[i].geometry.coordinates.push(
+              [data[k]['rm:long_end'], data[k]['rm:lat_end']]
+            );
+            f = true;
+            break;
+          }
 
-  getDataByRange('meas-locale', swlat, swlng, nelat, nelng, function(err, data) {
-    console.log('meas-locale', err, data);
-    for (var k in data) {
-      var circle = L.circle([parseFloat(data[k]['geo:lat']), parseFloat(data[k]['geo:long'])], 5, {
-        color: 'blue',
-         fillColor: '#f03',
-       fillOpacity: 0.5
-      }).addTo(map);
-      circle.bindPopup("I am a circle.");
-      measlocale.push(circle);
+          // data[k]の終了点が、すでに登録済みのポイントの開始点と同じなら先頭に付与する
+          if (data[k]['rm:long_end'] == features[i].geometry.coordinates[0][0] &&
+              data[k]['rm:lat_end'] == features[i].geometry.coordinates[0][1]) {
+            features[i].geometry.coordinates.splice(0, 0, 
+              [data[k]['rm:long_start'], data[k]['rm:lat_start']]
+            );
+            f = true;
+            break;
+          }
+        }
+        if (!f) {
+          // どこのデータにも入らない。
+          features.push({
+            geometry : {
+              coordinates : [
+                [data[k]['rm:long_start'], data[k]['rm:lat_start']],
+                [data[k]['rm:long_end'], data[k]['rm:lat_end']]
+              ],
+              type : 'LineString'
+            },
+            properties: {},
+            type : 'Feature'
+          });
+        }
+      }
+
+      function compressionPath(features) {
+        var before = features.length;
+        for (var i = 0; i < features.length; ++i) {
+          for (var j = features.length -1; i < j; --j) {
+            var f1Start = features[i].geometry.coordinates[0];
+            var f1End = features[i].geometry.coordinates[features[i].geometry.coordinates.length-1];
+
+            var f2Start = features[j].geometry.coordinates[0];
+            var f2End = features[j].geometry.coordinates[features[j].geometry.coordinates.length-1];
+
+            // f1の開始点がf2の終端と一致する場合、f1の前にf2がある
+            if (f1Start[0] == f2End[0] && f1Start[1] == f2End[1]) {
+              features[i].geometry.coordinates = features[j].geometry.coordinates.concat(features[i].geometry.coordinates);
+              features.splice(j, 1);
+              break;
+            }
+            // f1の終了点がf2の開始点と一致する場合、f1の後にf2がある
+            if (f1End[0] == f2Start[0] && f1End[1] == f2Start[1]) {
+              features[i].geometry.coordinates = features[i].geometry.coordinates.concat(features[j].geometry.coordinates);
+              features.splice(j, 1);
+              break;
+            }
+          }
+        }
+        if (features.length == before) {
+          return;
+        }
+        compressionPath(features);
+      }
+      compressionPath(features);
+
+      d3_features = g.selectAll('path')
+        .data(features)
+        .enter()
+        .append('path')
+        .attr('class', 'road')
+        .attr('id', function(d, i) {
+          return 'road_' + i;
+        });
+
+      d3_marker = g.selectAll('circle')
+        .data(features)
+        .enter()
+        .append('circle')
+        .attr('class', 'marker');
+
+      updateMapLayer();
+
+    });
+  }
+
+  var surfaceRange;
+  var svg = d3.select(map.getPanes().overlayPane).append("svg");
+  var g = svg.append("g").attr("class", "leaflet-zoom-hide");
+  var transform = d3.geo.transform({point: projectPoint});
+  var path = d3.geo.path().projection(transform);
+  //位置→座標変換
+  function projectPoint(x, y) {
+    var point = map.latLngToLayerPoint(new L.LatLng(y, x));
+    this.stream.point(point.x, point.y);
+  }
+
+  showBlockUI();
+  // 最優先タスク
+  var priorityTask = [
+    getSurfaceRange
+  ];
+  async.parallel(priorityTask, function(err, results) {
+    $.unblockUI();
+    if (err) {
+      console.log('priorityTask', err);
+      return;
     }
+    surfaceRange= results[0];
+
+    // SVGをマップレイヤーにフィット
+    map.on('viewreset', updateMapLayer);
+
+    // 通常タスク
+    var backgroundTask = [
+      getRoadMaster,
+      getMeshData,
+      getSurface
+    ];
+
+    // 
+    async.parallel(backgroundTask, function(err, results) {
+      if (err) {
+        console.log('backgroundTask', err);
+        return;
+      }
+    });
   });
-  */
 
 
   var meshSvg;
@@ -436,6 +458,7 @@ $(function() {
     width: 'resolve' ,
     dropdownAutoWidth: true
   });
+
   $('#selMesh').change(function() {
     function setupMesh() {
       var max = 0;
@@ -462,6 +485,7 @@ $(function() {
       setupMesh();
     }
   });
+
 
   function drawMesh() {
     if (!meshSvg) {
@@ -495,28 +519,136 @@ $(function() {
       })
       .attr('fill' , '#FFFF00');
   }
-  $.ajax({
-    type : 'GET',
-    url : '/road_mgt/json/get_road_surface_mesh',
-    cache: false,
-    data : {},
-    success : function (data) {
-      meshData = data;
-      meshSvg = g.selectAll('rect')
-        .data(data)
-        .enter()
-        .append('rect');
 
-      if (meshLoadCallbackEvent) {
-        meshLoadCallbackEvent();
+  /**
+   * 路面状況の1/8地域メッシュを取得する
+   */
+  function getMeshData(callback) {
+    $.ajax({
+      type : 'GET',
+      url : '/road_mgt/json/get_road_surface_mesh',
+      cache: false,
+      data : {},
+      success : function (data) {
+        meshData = data;
+        meshSvg = g.selectAll('rect')
+          .data(data)
+          .enter()
+          .append('rect');
+
+        if (meshLoadCallbackEvent) {
+          meshLoadCallbackEvent();
+        }
+        callback(null, null);
+      },
+      'error' :  function(xhr, textStatus, error) {
+        console.log(xhr);
+        callback(xhr, null);
       }
-    },
-    'error' :  function(xhr, textStatus, error) {
-      console.log(xhr);
+    });
+  }
+
+  var d3_surface;
+  var surfaceData = [];
+  var radiusScale = d3.scale.linear().domain([0, 100]).range([0, 30]);
+  $('#selSurface').change(function() {
+    var max = 0;
+    var min = 9999999;
+    var attr = $('#selSurface').val();
+    for (var i = 0; i < surfaceData.length; ++i) {
+      var v = surfaceData[i][attr];
+      if (max < v) {
+        max = v;
+      }
+      if (min > v) {
+        min = v;
+      }
     }
+    radiusScale = d3.scale.linear().domain([min, max]).range([0, 10]);
+    drawSurface();
+  });
+  $('#selSurface').select2({
+    width: 'resolve' ,
+    dropdownAutoWidth: true
   });
 
+  function drawSurface() {
+    if (!d3_surface) {
+      return;
+    }
+    d3_surface
+      .attr('fill-opacity', 0.2)
+      .attr('fill', '#0f0')
+      .attr('r', function(d) {
+        var v = $('#selSurface').val();
+        if (!v) {
+          return 0;
+        }
+        return radiusScale(d[v]);
+      })
+      .attr('cx', function(d) {
+        var pt =  map.latLngToLayerPoint(new L.LatLng(d.lat, d.long));
+        return pt.x;
+      })
+      .attr('cy', function(d) {
+        var pt =  map.latLngToLayerPoint(new L.LatLng(d.lat, d.long));
+        return pt.y;
+      });
+  }
+  /**
+   * 路面状況を取得する
+   */
+  function getSurface(callback) {
+    $.ajax({
+      type : 'GET',
+      url : '/road_mgt/json/get_road_surface',
+      cache: false,
+      data : {},
+      success : function (data) {
+        console.log('路面状況：', data);
+        surfaceData = data;
+        var parseDate = d3.time.format('%Y-%m-%d').parse;
+        var ndx = crossfilter(data);
+        var parseDate = d3.time.format('%Y-%m-%d').parse;
+        data.forEach(function(d) {
+          d.analysis_date = parseDate(d.analysis_timestamp.split(' ')[0]);
+        });
 
+        var dateDim = ndx.dimension(function(d) {
+          return d.analysis_date;
+        });
+        $('#chart-date').empty();
+        var chartDate  = dc.barChart('#chart-date');
+        var dateFormat = new DateFormat('MM/dd');
+        chartDate
+          .width(300)
+          .height(200)
+          .dimension(dateDim)
+          .group(dateDim.group().reduceCount())
+          .x(d3.scale.ordinal())
+          .xUnits(dc.units.ordinal);
+        chartDate.xAxis().tickFormat(function(v) {return dateFormat.format(v);});
+        chartDate.margins().left = 50;
+
+        dc.renderAll();
+
+        d3_surface = g.selectAll('circle')
+          .data(data)
+          .enter()
+          .append('circle')
+          .attr('class', 'surface')
+          .on('mouseover', function(d) {
+            console.log(d);
+          })
+        drawSurface();
+        callback(null, null);
+      },
+      'error' :  function(xhr, textStatus, error) {
+        console.log(xhr);
+        callback(xhr, null);
+      }
+    });
+  }
 });
 </script>
 </body>
