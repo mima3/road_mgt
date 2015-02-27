@@ -10,6 +10,8 @@ http://micrms.force.com/apis
 -------------
 easy_install python-geohash  
 easy_install peewee  
+easy_install lxml  
+
 
 インストール方法
 -----------------
